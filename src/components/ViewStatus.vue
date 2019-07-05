@@ -5,9 +5,13 @@
       wrap
     >
       <v-flex xs12>
-        <span v-text="timeElapsed" />
-        <v-btn @click="notify">
-          Notify me
+        <h2 v-text="status" />
+        <span>Automatically checks for updates every 15 seconds.</span>
+        <v-btn @click="notify" v-if="status === 'Online'">
+          Put status in a silent notification
+        </v-btn>
+        <v-btn @click="notify" v-else>
+          Notify me when I can call
         </v-btn>
       </v-flex>
     </v-layout>
@@ -15,32 +19,46 @@
 </template>
 
 <script lang="ts">
-import Vue from 'vue'
-import Component from 'vue-class-component';
+import { Component, Prop, Vue } from 'vue-property-decorator'
+import localforage from 'localforage'
 
-@Component({
-  props: {
-    code: String
-  }
-})
+@Component
 export default class ViewStatus extends Vue {
-  lastRefresh: number = Date.now()
+  status: string = ''
+  cancelToken: number = 0
+  @Prop({ type: String, required: true }) readonly code!: string
 
-  refresh() {
-    // axios to server
+// todo: move subscribe into mounted, trip list lifecycle
+  async mounted() {
+    if (document.visibilityState === 'visible') {
+      this.cancelToken = setInterval(this.refresh, 15000)
+    }
+    self.addEventListener('message', (event) => {
+      this.status = event.data.status
+      clearInterval(this.cancelToken)
+      this.cancelToken = setInterval(this.refresh, 15000)
+    })
+    document.addEventListener('visibilitychange', (event) => {
+      clearInterval(this.cancelToken)
+      if (document.visibilityState === 'visible') {
+        this.refresh()
+        this.cancelToken = setInterval(this.refresh, 15000)
+      }
+    })
   }
 
-  notify() {
-    // axios to server
-    // invoke service worker
+  async refresh() {
+    const { status }: { status: string } = await fetch(`/status?code=${encodeURIComponent(this.code)}`).then(res => res.json())
+    this.status = status
   }
 
-  get timeElapsed() {
-    return `Last refreshed ${(Date.now() - this.lastRefresh) / 1000}`
+  async notify() {
+    const registration = await self.navigator.serviceWorker.getRegistration()
+    if (registration) {
+      const subscription = await registration.pushManager.subscribe()
+      const data = await fetch('/subscribe', { method: 'POST', body: JSON.stringify({ subscription, code: this.code }) }).then(res => res.json())
+      await localforage.setItem(subscription.endpoint, { code: this.code, ...data })
+    }
   }
 }
 </script>
-
-<style>
-
-</style>
