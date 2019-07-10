@@ -1,5 +1,5 @@
 import { setInterval, clearInterval } from 'timers'
-import webpush, { PushSubscription } from 'web-push'
+import webpush from 'web-push'
 import express, { RequestHandler, Request, Response, NextFunction, ErrorRequestHandler } from 'express'
 import axios from 'axios'
 import mongoose from 'mongoose'
@@ -37,8 +37,14 @@ TripModel.find().exec().then((trips) => Promise.all(trips.map(async (trip) => {
   }
 })))
 
-// todo: dedup same endpoint same trip
 app.post('/subscribe', wrap(async ({ body: { code, subscription } }: { body: Subscriber }, res) => {
+  // Check to make sure user is not already subscribed
+  const user = await SubscriberModel.findOne({ code, 'subscription.endpoint': subscription.endpoint }).exec()
+  if (user) {
+    res.status(409).json({ error: 'Already subscribed' })
+    return
+  }
+  // Find or create a trip
   let trip = await TripModel.findOne({ code }).exec()
   let newTrip = false
   if (!trip) {
@@ -47,18 +53,25 @@ app.post('/subscribe', wrap(async ({ body: { code, subscription } }: { body: Sub
   }
   // Check to make sure link is still active
   const result = await check(trip)
-  if (result.status !== 'Offline') {
-    const subscriber = await SubscriberModel.create({ code, subscription } as Subscriber)
-    res.status(201).json({ id: subscriber._id })
-    await notify(subscriber, result.name!, result.driver!, result.timestamp, result.status!, true)
-    if (newTrip) {
-      trip.cancelToken = setInterval(checkInterval, POLL_MS, trip)
-      trip.driver = result.driver
-      trip.name = result.name
-      await trip.save()
-    }
-  } else {
+  if (result.status === 'Offline') {
     res.status(410).json({ error: 'Trip is over' })
+    return
+  }
+  // Register subscriber and respond to the user
+  const subscriber = await SubscriberModel.create({ code, subscription } as Subscriber)
+  res.status(201).json({
+    id: subscriber._id,
+    name: result.name!,
+    driver: result.driver!,
+    timestamp: result.timestamp!,
+    status: result.status!,
+  })
+  // Set up trip
+  if (newTrip) {
+    trip.cancelToken = setInterval(checkInterval, POLL_MS, trip)
+    trip.driver = result.driver
+    trip.name = result.name
+    await trip.save()
   }
 }))
 
@@ -77,7 +90,7 @@ app.get('/status', wrap(async ({ params: { code } }: { params: { code: string }}
   }
 }))
 
-app.use(((err, req, res, next) => {
+app.use(((err, _, res) => {
   res.status(400).json({ error: err })
   // tslint:disable-next-line: no-console
   console.error('Error rendering page: ')
@@ -85,33 +98,38 @@ app.use(((err, req, res, next) => {
 
 async function check(this: NodeJS.Timeout | void, trip: InstanceType<Trip>) {
   const timestamp = new Date()
+  // Return cached data if DEBOUNCE_MS have not passed since the last check
   if (trip.lastUpdated && Date.now() - trip.lastUpdated.getTime() < DEBOUNCE_MS) {
     return { timestamp, status: trip.status!, driver: trip.driver!, name: trip.name! }
-  } else {
-    const { data: { data } } = await api({ data: { shareToken: trip.code } })
-    if (data.error && data.error !== 'Unable to fetch the share link.') {
-      throw new Error(data.error)
-    } else if (data.error || data.jobs['1'].tokenState === 'INACTIVE') {
-      await notifyAll(trip.code, trip.name!, trip.driver!, timestamp, 'Offline')
-      await trip.remove()
-      if (this instanceof NodeJS.Timeout) {
-        clearInterval(this)
-      }
-      await SubscriberModel.deleteMany({ code: trip.code }).exec()
-      return { name: trip.name!, driver: trip.driver!, timestamp, status: 'Offline' }
-    } else {
-      const name: string = data.supply.firstName
-      const driver: string = data.supply.uuid
-      const status = data.jobs['1'].status
-
-      if (status !== trip.status) {
-        await notifyAll(trip.code, name, driver, timestamp, status)
-        trip.status = status
-      }
-      trip.lastUpdated = timestamp
-      trip.save()
-      return { name, driver, timestamp, status }
+  }
+  // Call the API
+  const { data: { data } } = await api({ data: { shareToken: trip.code } })
+  if (data.error && data.error !== 'Unable to fetch the share link.') {
+    // Unknown error
+    throw new Error(data.error)
+  } else if (data.error || data.jobs['1'].tokenState === 'INACTIVE') {
+    // Trip is over
+    await notifyAll(trip.code, timestamp, 'Offline')
+    await trip.remove()
+    if (this instanceof NodeJS.Timeout) {
+      clearInterval(this)
     }
+    await SubscriberModel.deleteMany({ code: trip.code }).exec()
+    return { name: trip.name!, driver: trip.driver!, timestamp, status: 'Offline' }
+  } else {
+    // Trip is still on
+    const name: string = data.supply.firstName
+    const driver: string = data.supply.uuid
+    const status = data.jobs['1'].status
+
+    if (status !== trip.status) {
+      // Status changed, send notifications
+      await notifyAll(trip.code, timestamp, status)
+      trip.status = status
+    }
+    trip.lastUpdated = timestamp
+    trip.save()
+    return { name, driver, timestamp, status }
   }
 }
 
@@ -124,20 +142,14 @@ async function checkInterval(this: NodeJS.Timeout, trip: InstanceType<Trip>) {
 }
 
 async function notify(
-  { subscription, _id }: InstanceType<Subscriber>,
-  name: string,
-  driver: string,
+  { subscription, code, _id }: InstanceType<Subscriber>,
   timestamp: Date,
-  status: string,
-  first: boolean = false) {
+  status: string) {
   try {
     await webpush.sendNotification(subscription, JSON.stringify({
-      name,
-      driver,
       timestamp: timestamp.getTime(),
-      _id,
+      code,
       status,
-      first,
     }))
   } catch (err) {
     // tslint:disable-next-line: no-console
@@ -154,10 +166,10 @@ async function notify(
   }
 }
 
-const notifyAll = async (code: string, name: string, driver: string, timestamp: Date, status: string) =>
+const notifyAll = async (code: string, timestamp: Date, status: string) =>
   SubscriberModel.find({ code }).exec()
     .then((subscribers) =>
-      Promise.all(subscribers.map((subscriber) => notify(subscriber, name, driver, timestamp, status))))
+      Promise.all(subscribers.map((subscriber) => notify(subscriber, timestamp, status))))
 
 async function unsubscribe(id: string): Promise<boolean> {
   const subscriber = await SubscriberModel.findByIdAndDelete(id).exec()
