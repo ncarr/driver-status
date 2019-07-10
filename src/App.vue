@@ -1,30 +1,9 @@
 <template>
-  <v-app>
-    <v-toolbar app>
-      <v-toolbar-title class="headline">
-        <span>Driver Status</span>
-      </v-toolbar-title>
-    </v-toolbar>
-
-    <v-content>
-      <EnterCode @code="track" />
-    </v-content>
-  </v-app>
+  <div id="app">
+    <div id="nav">
+      <router-link to="/">Home</router-link> |
+      <router-link to="/about">About</router-link>
+    </div>
+    <router-view/>
+  </div>
 </template>
-
-<script lang="ts">
-import Vue from 'vue'
-import Component from 'vue-class-component'
-import EnterCode from './components/EnterCode.vue'
-import ViewStatus from './components/ViewStatus.vue'
-
-@Component({
-  components: {
-    EnterCode,
-    ViewStatus
-  }
-})
-export default class App extends Vue {
-  
-}
-</script>
