@@ -22,7 +22,17 @@ import Vue from 'vue'
 export default class EnterCode extends Vue {
   code: string = ''
 
-  submit() {
+  async submit() {
+    const result = await fetch(`/status?code=${encodeURIComponent(this.code)}`)
+    const data = await result.json()
+    if (result.status !== 200) {
+      this.$emit('error', data.error)
+      return
+    }
+    if (data.status === 'Offline') {
+      this.$emit('error', 'The trip is over')
+      return
+    }
     this.$emit('code', this.code)
   }
 }

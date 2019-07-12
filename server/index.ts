@@ -1,4 +1,3 @@
-import { setInterval, clearInterval } from 'timers'
 import webpush from 'web-push'
 import express, { RequestHandler, Request, Response, NextFunction, ErrorRequestHandler } from 'express'
 import axios from 'axios'
@@ -22,7 +21,7 @@ const wrap = (fn: PromiseRequestHandler): RequestHandler => (req, res, next) => 
 
 // Set up api client
 const api = axios.create({
-  url: 'https://trip.uber.com/api/syrupFetch',
+  url: process.env.NODE_ENV === 'production' ? 'https://trip.uber.com/api/syrupFetch' : 'http://localhost:4000/status',
   method: 'post',
   headers: {
     'x-csrf-token': 'x',
@@ -84,9 +83,16 @@ app.get('/status', wrap(async ({ params: { code } }: { params: { code: string }}
   const trip = await TripModel.findOne({ code })
   if (trip) {
     const result = await check(trip)
-    res.json({ status: result.status })
+    res.json({ status: result.status, name: result.name })
   } else {
-    res.json({ status: 'Offline' })
+    const { data: { data } } = await api({ data: { shareToken: code } })
+    if (data.error && data.error !== 'Unable to fetch the share link.') {
+      throw new Error(data.error)
+    } else if (data.error || data.jobs['1'].tokenState === 'INACTIVE') {
+      res.json({ name: data.supply.firstName, status: 'Offline' })
+    } else {
+      res.json({ name: data.supply.firstName, status: data.jobs['1'].status })
+    }
   }
 }))
 
@@ -95,6 +101,8 @@ app.use(((err, _, res) => {
   // tslint:disable-next-line: no-console
   console.error('Error rendering page: ')
 }) as ErrorRequestHandler)
+
+app.listen(process.env.PORT || 3000)
 
 async function check(this: NodeJS.Timeout | void, trip: InstanceType<Trip>) {
   const timestamp = new Date()
@@ -111,7 +119,7 @@ async function check(this: NodeJS.Timeout | void, trip: InstanceType<Trip>) {
     // Trip is over
     await notifyAll(trip.code, timestamp, 'Offline')
     await trip.remove()
-    if (this instanceof NodeJS.Timeout) {
+    if (this) {
       clearInterval(this)
     }
     await SubscriberModel.deleteMany({ code: trip.code }).exec()

@@ -27,6 +27,7 @@
     ]
   },
   "include": [
+    "sw.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.vue",

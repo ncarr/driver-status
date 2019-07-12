@@ -1,42 +1,53 @@
-importScripts('https://unpkg.com/localforage')
+/// <reference lib="webworker" />
+import localforage from 'localforage'
+import workbox from 'workbox-sw'
+declare var self: ServiceWorkerGlobalScope & { __WB_MANIFEST: any }
 
-// Immediately invoked function expression as the promise for extendableEvent.waitUntil
+interface Trip {
+  id: string
+  name: string
+  driver: string
+  wentOnline: boolean
+  notify: boolean
+}
+
+// Immediately invoked async function expression as the promise for extendableEvent.waitUntil
 self.addEventListener('notificationclose', (event) => event.waitUntil((async () => {
-  let trip = await localforage.getItem(event.notification.data.code)
+  const trip: Trip = await localforage.getItem(event.notification.data.code)
   trip.notify = false
   await localforage.setItem(event.notification.data.code, trip)
-  const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true })
-  // todo: set up vue-router and have code-based urls
+  const windows = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+    .filter(({ url }) => url === `${process.env.BASE_URL}/status/${event.notification.data.code}`)
   if (windows.length === 0) {
     await unsubscribe(event.notification.data.code)
   }
 })()))
 
 self.addEventListener('notificationclick', (event) => event.waitUntil((async () => {
-  const windows = await clients.matchAll({ type: 'window' })
-  // todo: set up vue-router and have code-based urls
-  const window = windows.filter((window) => window.url === '/').shift()
-  if (window) {
+  const windows = await self.clients.matchAll({ type: 'window' })
+  const window = windows
+    .filter(({ url }) => url === `${process.env.BASE_URL}/status/${event.notification.data.code}`)
+    .shift()
+  if (window instanceof WindowClient) {
     window.focus()
   } else {
-    // todo: set up vue-router and have code-based urls
-    clients.openWindow('/')
+    self.clients.openWindow(`${process.env.BASE_URL}/status/${event.notification.data.code}`)
   }
 })()))
 
 self.addEventListener('pushsubscriptionchange', (event) => event.waitUntil((async () => {
   const subscription = event.newSubscription || await self.registration.pushManager.subscribe()
-  let codes = await localforage.keys()
-  await Promise.all(codes.map((code) => {
-    let trip = localforage.getItem(code)
+  const codes = await localforage.keys()
+  await Promise.all(codes.map(async (code) => {
+    const trip: Trip = await localforage.getItem(code)
     await fetch('/unsubscribe', { method: 'POST', body: JSON.stringify({ id: trip.id }) })
     try {
       const res = await fetch('/subscribe', {
         method: 'POST',
         body: JSON.stringify({
           subscription,
-          code
-        })
+          code,
+        }),
       })
       if (res.status === 410) {
         throw new Error('Offline')
@@ -47,7 +58,7 @@ self.addEventListener('pushsubscriptionchange', (event) => event.waitUntil((asyn
     } catch (err) {
       await localforage.removeItem(code)
       if (err.message !== 'Offline') {
-        console.error(err)
+        throw err
       }
     }
   }))
@@ -57,12 +68,13 @@ self.addEventListener('pushsubscriptionchange', (event) => event.waitUntil((asyn
 })()))
 
 self.addEventListener('push', (event) => event.waitUntil((async () => {
-  const data = event.data.json()
-  const windows = await clients.matchAll({ type: 'window' })
-  // todo: set up vue-router and have code-based urls
-  windows.filter((window) => window.url === '/').forEach((window) => window.postMessage(data))
+  const data = event.data!.json()
+  const windows = await self.clients.matchAll({ type: 'window' })
+  windows
+    .filter(({ url }) => url === `${process.env.BASE_URL}/status/${data.code}`)
+    .forEach((window) => window.postMessage(data))
   let renotify = false
-  let trip = await localforage.getItem(data.code)
+  const trip = await localforage.getItem<Trip>(data.code)
   if (!trip.wentOnline && data.status === 'Online') {
     renotify = true
     trip.wentOnline = true
@@ -73,10 +85,10 @@ self.addEventListener('push', (event) => event.waitUntil((async () => {
       body: data.status,
       tag: trip.driver,
       data: {
-        code: data.code
+        code: data.code,
       },
       timestamp: data.timestamp,
-      renotify
+      renotify,
     })
   }
   if (data.status === 'Offline') {
@@ -85,21 +97,25 @@ self.addEventListener('push', (event) => event.waitUntil((async () => {
 })()))
 
 
-self.addEventListener('message', (event) => event.waitUntil((async () => {
-  let trip = await localforage.getItem(event.notification.data.code)
-  // todo: set up vue-router and have code-based urls
-  const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+self.addEventListener('message', async (event) => {
+  const trip: Trip = await localforage.getItem(event.data.code)
+  const windows = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+    .filter(({ url }) => url === `${process.env.BASE_URL}/status/${event.data.code}`)
   if (!trip.notify && windows.length <= 1) {
     await unsubscribe(event.data)
   }
-})()))
+})
 
-async function unsubscribe(code) {
-  let { id } = await localforage.getItem(code)
+async function unsubscribe(code: string) {
+  const { id } = await localforage.getItem(code)
   await localforage.removeItem(code)
   if (await localforage.length() === 0) {
     const subscription = await self.registration.pushManager.getSubscription()
-    await subscription.unsubscribe()
+    if (subscription) {
+      await subscription.unsubscribe()
+    }
   }
   await fetch('/unsubscribe', { method: 'POST', body: JSON.stringify({ id }) })
 }
+
+workbox.precaching.precacheAndRoute(self.__WB_MANIFEST)
