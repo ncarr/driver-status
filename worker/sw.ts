@@ -1,6 +1,5 @@
-/// <reference lib="webworker" />
 import localforage from 'localforage'
-import workbox from 'workbox-sw'
+import { precacheAndRoute } from 'workbox-precaching/precacheAndRoute'
 declare var self: ServiceWorkerGlobalScope & { __WB_MANIFEST: any }
 
 interface Trip {
@@ -24,8 +23,7 @@ self.addEventListener('notificationclose', (event) => event.waitUntil((async () 
 })()))
 
 self.addEventListener('notificationclick', (event) => event.waitUntil((async () => {
-  const windows = await self.clients.matchAll({ type: 'window' })
-  const window = windows
+  const window = (await self.clients.matchAll({ type: 'window' }))
     .filter(({ url }) => url === `${process.env.BASE_URL}/status/${event.notification.data.code}`)
     .shift()
   if (window instanceof WindowClient) {
@@ -101,6 +99,9 @@ self.addEventListener('message', async (event) => {
   const trip: Trip = await localforage.getItem(event.data.code)
   const windows = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
     .filter(({ url }) => url === `${process.env.BASE_URL}/status/${event.data.code}`)
+  // debug: should windows.length be 0 or 1?
+  // tslint:disable-next-line: no-console
+  console.log(windows.length)
   if (!trip.notify && windows.length <= 1) {
     await unsubscribe(event.data)
   }
@@ -118,4 +119,4 @@ async function unsubscribe(code: string) {
   await fetch('/unsubscribe', { method: 'POST', body: JSON.stringify({ id }) })
 }
 
-workbox.precaching.precacheAndRoute(self.__WB_MANIFEST)
+precacheAndRoute(self.__WB_MANIFEST, {})

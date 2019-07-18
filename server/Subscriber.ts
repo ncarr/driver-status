@@ -1,5 +1,5 @@
 import { prop, Typegoose } from 'typegoose'
-import { PushSubscription } from 'web-push'
+import PushSubscription from './PushSubscription'
 
 export class Subscriber extends Typegoose {
   @prop({ required: true })

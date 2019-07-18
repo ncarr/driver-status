@@ -9,7 +9,7 @@
           v-model="code"
           label="Share link or code"
         />
-        <v-btn @click="submit">
+        <v-btn @click="submit()">
           View Status
         </v-btn>
       </v-flex>
@@ -20,9 +20,9 @@
 <script lang="ts">
 import Vue from 'vue'
 export default class EnterCode extends Vue {
-  code: string = ''
+  public code: string = ''
 
-  async submit() {
+  public async submit() {
     const result = await fetch(`/status?code=${encodeURIComponent(this.code)}`)
     const data = await result.json()
     if (result.status !== 200) {

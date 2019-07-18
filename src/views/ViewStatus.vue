@@ -21,8 +21,8 @@
             Notify me when I can call
           </v-btn>
         </template>
-        <p v-else-if="!notificationsEnabled">Permission to send notifications was denied for this website</p>
-        <p v-else>You are subscribed to notifications for this trip</p>
+        <p v-else-if="!notificationsEnabled && status !== 'Offline'">Permission to send notifications was denied for this website</p>
+        <p v-else-if="status !== 'Offline'">You are subscribed to notifications for this trip</p>
         <p v-text="error" />
       </v-flex>
     </v-layout>
@@ -33,34 +33,27 @@
 import { Component, Prop, Vue } from 'vue-property-decorator'
 import localforage from 'localforage'
 import { Route } from 'vue-router'
+import Trip from '@/plugins/Trip'
 
 Component.registerHooks([
-  'beforeRouteUpdate'
+  'beforeRouteUpdate',
 ])
-
-interface Trip {
-  id: string
-  name: string
-  driver: string
-  wentOnline: boolean
-  notify: boolean
-}
 
 @Component
 export default class ViewStatus extends Vue {
-  name: string = 'Loading...'
-  status: string = 'Loading...'
-  error: string = ''
-  cancelToken: number = 0
-  lastUpdated: number = 0
-  notificationsEnabled: boolean = true
-  notified: boolean = false
+  public name: string = 'Loading...'
+  public status: string = 'Loading...'
+  public error: string = ''
+  public cancelToken: number = 0
+  public lastUpdated: number = 0
+  public notificationsEnabled: boolean = true
+  public notified: boolean = false
 
   get code() {
     return this.$route.params.code
   }
 
-  async mounted() {
+  public async mounted() {
     await this.refresh()
     if (this.status === 'Offline') {
       this.notificationsEnabled = false
@@ -73,7 +66,7 @@ export default class ViewStatus extends Vue {
     })
     document.addEventListener('visibilitychange', (event) => {
       clearInterval(this.cancelToken)
-      if (document.visibilityState === 'visible') {
+      if (this.status !== 'Offline' && document.visibilityState === 'visible') {
         this.cancelToken = setInterval(this.refresh, 15000)
         if (Date.now() - this.lastUpdated > 5000) {
           this.refresh()
@@ -93,7 +86,10 @@ export default class ViewStatus extends Vue {
     let trip = await localforage.getItem<Trip>(this.code)
     if (!trip) {
       const subscription = await registration.pushManager.subscribe()
-      const { id, name, driver, timestamp, status } = await fetch('/subscribe', { method: 'POST', body: JSON.stringify({ subscription, code: this.code }) }).then(res => res.json())
+      const { id, name, driver, timestamp, status } = await fetch('/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ subscription, code: this.code }),
+      }).then((res) => res.json())
       trip = { id, name, driver, wentOnline: status === 'Online', notify: false }
       await localforage.setItem<Trip>(this.code, trip)
       this.status = status
@@ -104,21 +100,22 @@ export default class ViewStatus extends Vue {
     }
   }
 
-  destroyed() {
+  public destroyed() {
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage(this.code)
     }
   }
 
-  beforeRouteUpdate(to: Route, from: Route, next: () => void) {
+  public beforeRouteUpdate(to: Route, from: Route, next: () => void) {
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage(this.code)
     }
     next()
   }
 
-  async refresh() {
-    const { status, name, error } = await fetch(`/status?code=${encodeURIComponent(this.code)}`).then(res => res.json())
+  public async refresh() {
+    const { status, name, error } = await fetch(`/status?code=${encodeURIComponent(this.code)}`)
+      .then((res) => res.json())
     if (error) {
       this.error = error
       return
@@ -126,12 +123,15 @@ export default class ViewStatus extends Vue {
     this.status = status
     this.name = `${name}'s Trip`
     this.lastUpdated = Date.now()
+    if (status === 'Offline') {
+      this.cancelToken = 0
+    }
   }
 
-  async notify() {
+  public async notify() {
     if (Notification.permission === 'denied') {
         this.notificationsEnabled = false
-      return
+        return
     }
     const registration = await navigator.serviceWorker.getRegistration()
     if (!registration) {
@@ -145,17 +145,17 @@ export default class ViewStatus extends Vue {
         return
       }
     }
-    let trip: Trip = await localforage.getItem(this.code)
+    const trip: Trip = await localforage.getItem(this.code)
     trip.notify = true
     await localforage.setItem(this.code, trip)
     registration.showNotification(`${name}'s Trip`, {
       body: this.status,
       tag: trip.driver,
       data: {
-        code: this.code
+        code: this.code,
       },
       timestamp: this.lastUpdated,
-      silent: true
+      silent: true,
     })
     this.notified = true
   }
