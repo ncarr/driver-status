@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+  node:
+    environment:
+     - API_URL=http://testserver:4000/status
+  testserver:
+    image: driver-status-server
+    command: yarn testserver
+    environment:
+     - NODE_ENV=production
+    ports:
+     - "4000:4000"

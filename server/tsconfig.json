@@ -14,9 +14,6 @@
     "outDir": "dist",
     "baseUrl": ".",
     "resolveJsonModule": true,
-    "types": [
-      "webpack-env"
-    ],
     "lib": [
       "esnext",
       "scripthost"

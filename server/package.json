@@ -12,17 +12,18 @@
   "author": "Nicholas Carr",
   "license": "ISC",
   "dependencies": {
-    "@types/bull": "^3.10.0",
     "axios": "^0.19.0",
     "bull": "^3.10.0",
     "express": "^4.17.1",
     "mongoose": "^5.6.3",
     "nedb": "^1.8.0",
     "reflect-metadata": "^0.1.13",
+    "tslib": "^1.10.0",
     "typegoose": "^5.7.2",
     "web-push": "^3.3.5"
   },
   "devDependencies": {
+    "@types/bull": "^3.10.0",
     "@types/express": "^4.17.0",
     "@types/mongoose": "^5.5.6",
     "@types/nedb": "^1.8.7",

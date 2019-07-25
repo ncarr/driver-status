@@ -1,0 +1,7 @@
+node_modules
+dist
+vapid.json
+package-lock.json
+yarn.lock
+Dockerfile
+.dockerignore

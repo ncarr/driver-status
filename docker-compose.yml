@@ -1,0 +1,38 @@
+version: '3.7'
+services:
+  frontend-proxy:
+    build: .
+    image: driver-status-nginx
+    restart: always
+    ports:
+     - "80:80"
+    depends_on:
+     - node
+  node:
+    build: server
+    image: driver-status-server
+    restart: always
+    environment:
+     - NODE_ENV=production
+    depends_on:
+     - mongo
+     - redis
+    secrets:
+     - vapid
+  mongo:
+    image: mongo:4.0
+    restart: always
+    volumes:
+      - mongodata:/data/mongo
+  redis:
+    image: redis:5.0-alpine
+    command: redis-server --appendonly yes
+    restart: always
+    volumes:
+      - redisdata:/data
+volumes:
+  mongodata:
+  redisdata:
+secrets:
+  vapid:
+    external: true

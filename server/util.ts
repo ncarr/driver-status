@@ -1,5 +1,7 @@
+import fs from 'fs'
 import Queue from 'bull'
 import axios from 'axios'
+import mongoose from 'mongoose'
 import { InstanceType } from 'typegoose'
 import { DeleteWriteOpResultObject } from 'mongodb'
 import { SubscriberModel, Subscriber } from './Subscriber'
@@ -7,14 +9,30 @@ import { TripModel, Trip } from './Trip'
 
 export const POLL_MS = 30000
 export const URL = process.env.API_URL || 'https://trip.uber.com/api/syrupFetch'
+export const vapidDetails = JSON.parse(fs.readFileSync('/run/secrets/vapid').toString())
 
 export interface NotificationData {
   subscriber: InstanceType<Subscriber>
   status: string
 }
 
-export const polling = new Queue<undefined>('polling')
-export const notifications = new Queue<NotificationData>('notifications')
+mongoose.connect(process.env.MONGO_URL || 'mongodb://mongo/driverstatus',
+  { useNewUrlParser: true, useFindAndModify: false })
+
+export const polling = new Queue<undefined>('polling', process.env.REDIS_URL || 'redis://redis:6379')
+  // tslint:disable-next-line: no-console
+  .on('error', (error) => console.log('polling error ', error))
+  // tslint:disable-next-line: no-console
+  .on('stalled', (job) => console.log('polling stalled ', job))
+  // tslint:disable-next-line: no-console
+  .on('failed', (job) => console.log('polling failed ', job))
+export const notifications = new Queue<NotificationData>('notifications', process.env.REDIS_URL || 'redis://redis:6379')
+  // tslint:disable-next-line: no-console
+  .on('error', (error) => console.log('notifications error ', error))
+  // tslint:disable-next-line: no-console
+  .on('stalled', (job) => console.log('notifications stalled ', job))
+  // tslint:disable-next-line: no-console
+  .on('failed', (job) => console.log('notifications failed ', job))
 
 export async function refresh(code: string, upsert: boolean) {
   // Call the API as usual

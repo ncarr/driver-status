@@ -23,7 +23,9 @@ export default class EnterCode extends Vue {
   public code: string = ''
 
   public async submit() {
-    const result = await fetch(`/status?code=${encodeURIComponent(this.code)}`)
+    const n = this.code.lastIndexOf('/')
+    const code = this.code.substring(n + 1)
+    const result = await fetch(`/api/status?code=${encodeURIComponent(code)}`)
     const data = await result.json()
     if (result.status !== 200) {
       this.$emit('error', data.error)
@@ -33,7 +35,7 @@ export default class EnterCode extends Vue {
       this.$emit('error', 'The trip is over')
       return
     }
-    this.$emit('code', this.code)
+    this.$emit('code', code)
   }
 }
 </script>
