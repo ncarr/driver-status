@@ -1,29 +1,28 @@
 # driver-status
+### Notifies you when you can call a driver
 
 ## Project setup
+
+Create encryption keys for notifications:
 ```
-yarn install
+docker run --rm -ti ncarr/driver-status-server yarn -s generate-keys > vapid.json
 ```
 
-### Compiles and hot-reloads for development
+Add a `subject` key with your URL or mailto link to `vapid.json`.
+
+Create the secret in Docker:
 ```
-yarn run serve
+cat vapid.json | docker secret create vapid -
 ```
 
-### Compiles and minifies for production
+## Running the app
+
 ```
-yarn run build
+docker stack deploy -c docker-compose.yml driver-status
 ```
 
-### Run your tests
-```
-yarn run test
-```
+## Stopping the app
 
-### Lints and fixes files
 ```
-yarn run lint
+docker stack rm driver-status
 ```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).

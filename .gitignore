@@ -2,7 +2,7 @@
 node_modules
 **/dist
 
-server/vapid.json
+**/vapid.json
 
 # local env files
 .env.local
