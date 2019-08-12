@@ -37,18 +37,18 @@ app.post('/subscribe', wrap(async ({ body: { code, subscription } }: { body: Sub
     res.status(410).json({ error: 'Offline' })
     return
   }
+  await polling.add(code, undefined, { repeat: { every: POLL_MS } })
   const { _id: id } = await SubscriberModel.findOneAndUpdate(
     { code, 'subscription.endpoint': subscription.endpoint },
     { subscription },
     { upsert: true, new: true },
   ).exec() as InstanceType<Subscriber>
-  await polling.add(code, undefined, undefined)
   res.json({ id, status, name, driver })
 }))
 
 app.post('/unsubscribe', wrap(async ({ body: { id } }: { body: { id: string } }, res, next) => {
   const subscriber = await SubscriberModel.findOneAndDelete({ _id: id }).exec()
-  if (subscriber && await SubscriberModel.count({ code: subscriber.code }).exec() === 0) {
+  if (subscriber && await SubscriberModel.countDocuments({ code: subscriber.code }).exec() === 0) {
     await TripModel.deleteOne({ code: subscriber.code }).exec()
     await polling.removeRepeatable(subscriber.code, { every: POLL_MS })
   }

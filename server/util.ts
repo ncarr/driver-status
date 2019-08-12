@@ -16,8 +16,30 @@ export interface NotificationData {
   status: string
 }
 
-mongoose.connect(process.env.MONGO_URL || 'mongodb://mongo/driverstatus',
+const connect = () => mongoose.connect(process.env.MONGO_URL || 'mongodb://mongo/driverstatus',
   { useNewUrlParser: true, useFindAndModify: false })
+  // tslint:disable-next-line: no-empty
+  .catch(() => {})
+
+mongoose.connection
+  // tslint:disable-next-line: no-console
+  .on('connecting', () => console.log('Connecting to MongoDB'))
+  .on('error', (error) => {
+    // tslint:disable-next-line: no-console
+    console.log('Error connecting to MongoDB: ', error)
+    mongoose.disconnect()
+  })
+  // tslint:disable-next-line: no-console
+  .on('connected', () => console.log('Connected to MongoDB'))
+  // tslint:disable-next-line: no-console
+  .on('reconnected', () => console.log('Reconnected to MongoDB'))
+  .on('disconnected', () => {
+    // tslint:disable-next-line: no-console
+    console.log('Disconnected from MongoDB. Reconnecting in 5 s')
+    setTimeout(connect, 5000)
+  })
+
+connect()
 
 export const polling = new Queue<undefined>('polling', process.env.REDIS_URL || 'redis://redis:6379')
   // tslint:disable-next-line: no-console

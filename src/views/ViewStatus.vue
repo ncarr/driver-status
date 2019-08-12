@@ -13,10 +13,10 @@
       >
         <v-flex xs12>
           <h2 v-text="status" />
-          <p>Automatically checks for updates every 15 seconds.</p>
           <template v-if="status !== 'Offline'">
+            <p>Automatically checks for updates every 15 seconds.</p>
             <p v-if="!notificationsEnabled">Permission to send notifications was denied for this website</p>
-            <template v-else-if="notified">
+            <template v-else-if="notified && (!wentOnline || status === 'Online')">
               <p>You are subscribed to notifications for this trip</p>
               <v-btn @click="unsubscribe">
                 Unsubscribe
@@ -37,7 +37,7 @@
 </template>
 
 <script lang="ts">
-import { Component, Prop, Vue } from 'vue-property-decorator'
+import { Component, Prop, Vue, Watch } from 'vue-property-decorator'
 import localforage from 'localforage'
 import { Route } from 'vue-router'
 import Trip from '@/plugins/Trip'
@@ -55,6 +55,7 @@ export default class ViewStatus extends Vue {
   public lastUpdated: number = 0
   public notificationsEnabled: boolean = true
   public notified: boolean = false
+  public wentOnline: boolean = false
   public code: string = ''
 
   public async mounted() {
@@ -111,6 +112,7 @@ export default class ViewStatus extends Vue {
     } else {
       this.notified = trip.notify
     }
+    this.wentOnline = trip.wentOnline
     if (Notification.permission === 'denied') {
       this.notificationsEnabled = false
     }
@@ -124,6 +126,13 @@ export default class ViewStatus extends Vue {
     this.teardown()
     this.code = to.params.code
     next()
+  }
+
+  @Watch('status')
+  public onStatusChange(status: ViewStatus['status']) {
+    if (status === 'Online') {
+      this.wentOnline = true
+    }
   }
 
   public async refresh() {
@@ -161,6 +170,7 @@ export default class ViewStatus extends Vue {
     }
     const trip: Trip = await localforage.getItem(this.code)
     trip.notify = true
+    trip.wentOnline = this.wentOnline = this.status === 'Online'
     await localforage.setItem(this.code, trip)
     await registration.showNotification(this.name, {
       body: this.status,
