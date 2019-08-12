@@ -5,7 +5,7 @@
 
 Create encryption keys for notifications:
 ```
-docker run --rm -ti ncarr/driver-status-server yarn -s generate-keys > vapid.json
+docker run --rm -ti nicholascarr/driver-status-server yarn -s generate-keys > vapid.json
 ```
 
 Add a `subject` key with your URL or mailto link to `vapid.json`.
