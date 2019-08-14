@@ -24,4 +24,4 @@ volumes:
   redisdata:
 secrets:
   vapid:
-    external: true
+    file: ./vapid.json

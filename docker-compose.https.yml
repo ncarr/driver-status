@@ -1,0 +1,14 @@
+version: '3.7'
+services:
+  frontend-proxy:
+    ports:
+     - "443:443"
+    secrets:
+    - driver-status-crt
+    - driver-status-key
+    command: ["nginx", "-c", "nginx.https.conf", "-g", "daemon off;"]
+secrets:
+  driver-status-crt:
+    file: ./app.crt
+  driver-status-key:
+    file: ./app.key

@@ -3,6 +3,8 @@ node_modules
 **/dist
 
 **/vapid.json
+app.crt
+app.key
 
 # local env files
 .env.local

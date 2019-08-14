@@ -7,3 +7,6 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 .gitignore
+vapid.json
+app.crt
+app.key

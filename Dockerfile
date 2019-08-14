@@ -9,3 +9,4 @@ RUN yarn build
 FROM nginx:1.17-alpine AS proxy
 COPY --from=frontend-build /home/node/app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.https.conf /etc/nginx/nginx.https.conf
