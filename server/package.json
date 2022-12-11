@@ -15,7 +15,7 @@
   "dependencies": {
     "axios": "^0.19.0",
     "bull": "^3.10.0",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "mongoose": "^5.7.5",
     "nedb": "^1.8.0",
     "reflect-metadata": "^0.1.13",
